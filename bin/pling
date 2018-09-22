@@ -9,7 +9,6 @@ DEBUG:
 """
 
 import socket
-import struct
 import os
 import sys
 import configparser
