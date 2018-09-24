@@ -17,6 +17,9 @@ import argparse
 import logging
 import pprint
 
+# get a logger
+log = logging.getLogger()
+
 ### some further notes
 # socket flags: socket.AI_ADDRCONFIG -> gives info about IP|^IP and lIP|^lIP
 # set default output dialect for MACs to netaddr.strategy.eui48.mac_unix
@@ -50,8 +53,6 @@ try:
 except Exception as e:
     log.debug('Module pyroute2 does not exist')
 
-# get a logger
-log = logging.getLogger()
 # set possible logging Severities, we want to use
 logSev = [logging.ERROR, logging.INFO, logging.DEBUG]
 
