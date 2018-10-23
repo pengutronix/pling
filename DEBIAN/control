@@ -1,0 +1,6 @@
+Package: pling
+Version: 0.1
+Section: base
+Architecture: any
+Maintainer: Björn Lässig <b.laessig@pengutronix.de>
+Depends: python3, python-netaddr, python-pyroute2, ipython
