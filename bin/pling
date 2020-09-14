@@ -164,6 +164,17 @@ def ipv6_get_MACs(host):
     log.debug('Found macs for %s via IPv6 DNS: %r', host, list(macS))
     return macS
 
+def ipv6_get_linklocal_MACs(args, config):
+    short_host = args.HOSTNAME.split('.')[0]
+    linklocaldomain = config['General']['linklocaldomain']
+    macS = set()
+    if linklocaldomain is None:
+        return macS
+    lilo_fqdn = '.'.join([short_host, linklocaldomain])
+    log.info(f'Try to find IPv6-Addresses to generate macs from {lilo_fqdn}')
+    return ipv6_get_MACs(lilo_fqdn)
+
+
 def prepare_magic_packetcontents(mac):
     # Prepare the magic packet
     send_data =  b''.fromhex('ffffffffffff') + 16 * mac.packed
@@ -391,6 +402,7 @@ if __name__ == '__main__':
             log.info('No sections found for %s in config', args.HOSTNAME)
         ## from dns        
         macS.update(ipv6_get_MACs(args.HOSTNAME))
+        macS.update(ipv6_get_linklocal_MACs(args, myconfig))
         log.info('With all algorithms: found Macs for %s: %s', args.HOSTNAME, macS)
 
         if not macS:
