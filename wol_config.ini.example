@@ -1,5 +1,3 @@
-# Save this file as .wol_config.ini in the same directory as wol.py
-
 [General]
 broadcast=192.168.1.255
 
