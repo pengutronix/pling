@@ -16,6 +16,7 @@ import glob
 import argparse
 import logging
 import pprint
+from dataclasses import dataclass
 
 # get a logger
 log = logging.getLogger()
@@ -53,11 +54,17 @@ try:
 except Exception as e:
     log.debug('Module pyroute2 does not exist')
 
+try:
+    import dns.resolver
+    import dns.rdatatype as rdatatype
+except Exception as e:
+    log.debug('please install package python3-dnspython')
+
 # set possible logging Severities, we want to use
 logSev = [logging.ERROR, logging.INFO, logging.DEBUG]
 
 # keys that will be split, if they are multiline
-multi_line_config_keys = ['mac']
+multi_line_config_keys = ['mac', 'linklocaldomain']
 
 def config_logging(args):
     """ simple logging configuration """
@@ -123,6 +130,12 @@ getaddrInfoRetT = namedtuple('getaddrInfoRetT',
 sockaddr6T = namedtuple('sockaddr6T', ['address', 'port', 'flow_info', 'scope_id'])
 sockaddr4T = namedtuple('sockaddr6T', ['address', 'port'])
 
+@dataclass
+class LinkLocalDomain:
+    priority: int
+    domain: str
+
+
 def ipv6_get_AAAA_records(hostname):
     # with these calls we want to get a IPv6 Answer regardless
     # it is disable on this host or not
@@ -166,14 +179,43 @@ def ipv6_get_MACs(host):
 
 def ipv6_get_linklocal_MACs(args, config):
     short_host = args.HOSTNAME.split('.')[0]
-    linklocaldomain = config['General']['linklocaldomain']
-    macS = set()
-    if linklocaldomain is None:
-        return macS
-    lilo_fqdn = '.'.join([short_host, linklocaldomain])
+    linklocaldomains = config.get('General',{}).get('linklocaldomain')
+    macs = set()
+    if linklocaldomains is None:
+        # try to detetct linklocaldomain
+        linklocaldomains = linklocaldomain_detect()
+        if linklocaldomains is None:
+            log.info('There is no LinkLocalDomain found to detect mac addresses')
+            return set()
+    for linklocaldomain in linklocaldomains:
+        lilo_fqdn = '.'.join([short_host, linklocaldomain])
+        mac = ipv6_get_MACs(lilo_fqdn)
+        if mac:
+            macs.update(mac)
+            log.debug(f'Added Mac<{mac}> from Linklocaldomain<{lilo_fqdn}>')
     log.info(f'Try to find IPv6-Addresses to generate macs from {lilo_fqdn}')
-    return ipv6_get_MACs(lilo_fqdn)
+    return macs
 
+def linklocaldomain_detect():
+    resolver=dns.resolver.Resolver()
+    results = []
+    try:
+        dnsAnswers = resolver.query('_linklocaldomain', rdatatype.SRV,
+                             raise_on_no_answer=False)
+    except dns.resolver.NXDOMAIN as e:
+        log.debug('Did not find a SRV record for "_linklocaldomain".')
+        return []
+    for answer in dnsAnswers:
+        lilodomain = LinkLocalDomain(answer.priority, answer.target.to_text())
+        results.append(lilodomain)
+
+    results.sort(key=lambda x: x.priority)
+    results = [x.domain for x in results]
+    if results:
+        log.debug('Found linklocal domain(s): %r', list(results))
+    else:
+        log.debug('Did not find a SRV record for "_linklocaldomain".')
+    return results
 
 def prepare_magic_packetcontents(mac):
     # Prepare the magic packet
