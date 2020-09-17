@@ -14,6 +14,7 @@ setup(
     install_requires=[
         'netaddr',
         'pyroute2',
+        'dnspython',
     ],
     scripts=[
         'bin/pling',
