@@ -313,45 +313,36 @@ def send_packet_IPv4(host, packet):
         sentPackets += 1
     return sentPackets
 
-def getIPv6CapableInterfaces():
-    # this function is only useful for IPv6
-    # if pyroute2 is not loaded - we cannot use this funktion
-    if not sys.modules.get('pyroute2'):
-        return set()
-    matchingInterfacesSet = set()
-
-    pyr = pyroute2.IPRoute()
-    a = pyr.get_links(family=socket.AF_INET6)
-    interfaceS = set()
-    for c in a:
-        if c.get('family', 0) != 10:
-            continue
-        for key, value in c.get('attrs', []):
-            if key == 'IFLA_IFNAME':
-                myInterface = value
-            if key == 'IFLA_OPERSTATE':
-                myState = value
-        if myInterface == 'lo':
-            continue
-        if myState == 'DOWN':
-            continue
-        interfaceS.add(myInterface)
-    log.debug('Found %s IPv6 capable interfaces: %s', len(interfaceS), interfaceS)
-    return interfaceS
-
-def send_packet_IPv6(host, packet, interfaces=None):
+def send_packet_IPv6(host, packet):
     # Broadcast it to the LAN.
     sentPackets = 0
-    if interfaces is None:
-        interfaces = getIPv6CapableInterfaces()
-    for interface in interfaces:
-        sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_DONTROUTE, 1)
-        sentB = sock.sendto(packet, ('ff02::1%{}'.format(interface), 7))
-        if sentB >= 102:
-            log.debug('Sent magic packet to interface %s', interface)
-            sentPackets += 1
+    sockconfig = {
+        'port'   : 7, # Protocol echo
+        'proto'  : socket.IPPROTO_UDP,
+        'family' : socket.AF_INET6,
+        'type'   : socket.SOCK_DGRAM,
+        'flags'  : socket.AI_ADDRCONFIG | socket.AI_NUMERICSERV | socket.AI_ADDRCONFIG,
+    }
+    for _, interface in socket.if_nameindex():
+        try:
+            getaddrInfoRetTL = socket.getaddrinfo(f'ff02::1%{interface}', **sockconfig)
+        except Exception as e:
+            log.debug('Ignoring interface %s. Was trying to get addrinfo: %r', interface, e)
+            next
+        for raw_addr_info in getaddrInfoRetTL:
+            addr_info = getaddrInfoRetT(*raw_addr_info)
+            log.debug('Try to send on %s:', interface)
+            sock = socket.socket(family=socket.AF_INET6, type=socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_DONTROUTE, 1)
+            try:
+                sentB = sock.sendto(packet, addr_info.sockaddr)
+                if sentB >= 102:
+                    log.info('Sent magic IPv6 packet to interface %s', interface)
+                    sentPackets += 1
+            except Exception as e:
+                log.debug('Failed to send on %s: %s', interface, e)
+                pass
     return sentPackets
 
 
@@ -451,14 +442,13 @@ if __name__ == '__main__':
             log.error('Could not gather the mac address for host %s', args.HOSTNAME)
 
         packets_send = 0
-        interfaces = getIPv6CapableInterfaces()
         for mac in macS:
             # prepare the magic packet
             magicpacket = prepare_magic_packetcontents(mac)
 
             # now try to send a magic packet to these mac-addresses
             packets_send += send_packet_IPv4(args.HOSTNAME, magicpacket)
-            packets_send += send_packet_IPv6(args.HOSTNAME, magicpacket, interfaces)
+            packets_send += send_packet_IPv6(args.HOSTNAME, magicpacket)
         log.info('Sent %s packets to wake up %s', packets_send, args.HOSTNAME)
 
         if packets_send < 1:
