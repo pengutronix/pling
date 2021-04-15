@@ -271,7 +271,7 @@ def send_packet_IPv4(host, packet):
     # check if we could send something via IPv4
     sentPackets = 0
     sockconfig = {
-        'port'   : 7,
+        'port'   : 7, # echo
         'proto'  : socket.getprotobyname('udp'),
         'family' : socket.AddressFamily.AF_INET,
         'type'   : socket.SOCK_DGRAM,
